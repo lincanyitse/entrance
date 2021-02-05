@@ -1,0 +1,64 @@
+version: "3.8"
+services:
+  traefik:
+    container_name: traefik
+    image: traefik:v2.4
+    environment:
+      - ALICLOUD_ACCESS_KEY=${ACCESS_KEY}
+      - ALICLOUD_SECRET_KEY=${SECRET_KEY}
+    ports:
+      - 80:80
+      - 443:443
+    command:
+      - --api.dashboard
+      - --api.insecure
+      - --certificatesResolvers.ali.acme.email=${EMAIL}
+      - --certificatesResolvers.ali.acme.storage=/etc/traefik/letsencrypt/acme.json
+      - --certificatesResolvers.ali.acme.httpchallenge
+      - --certificatesResolvers.ali.acme.httpchallenge.entrypoint=web
+      - --certificatesResolvers.ali.acme.dnsChallenge
+      - --certificatesResolvers.ali.acme.dnsChallenge.provider=alidns
+      - --entrypoints.web.address=:80
+      - --entrypoints.websecure.address=:443
+      - --entryPoints.traefik.address=:8080
+      - --global.sendanonymoususage=false
+      - --accessLog
+      - --accessLog.filePath=/var/log/traefik/access.log
+      - --ping
+      - --providers.docker
+      - --providers.docker.endpoint=unix:///var/run/docker.sock
+      - --providers.docker.exposedByDefault
+      - --serverstransport.insecureskipverify
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - /data/traefik/letsencrypt/:/etc/traefik/letsencrypt/
+      - /data/traefik/logs/:/var/log/traefik/
+    labels:
+      # 配置 SSL
+      - traefik.http.routers.traefik.tls=true
+      - traefik.http.routers.traefik.tls.certresolver=ali
+      # 泛域名
+      - traefik.http.routers.traefik.tls.domains[0].sans=${DOMAIN_NAME}
+      - traefik.http.routers.traefik.tls.domains[0].sans=*.${DOMAIN_NAME}
+      # 开放 UI
+      - traefik.http.routers.traefik.entrypoints=websecure
+      - traefik.http.routers.traefik.rule=(Host(`traefik.${DOMAIN_NAME}`) && (PathPrefix(`/dashboard`) || PathPrefix(`/api`)))
+      - traefik.http.services.traefik.loadbalancer.server.port=8080
+      # 基础认证
+      - traefik.http.middlewares.traefik.basicauth.users=${USER}:${PASSWORD}
+      - traefik.http.middlewares.traefik.basicauth.removeheader=true
+      - traefik.http.routers.traefik.middlewares=traefik@docker
+  inlets:
+    container_name: "inlets"
+    image: inlets/inlets:2.7.4
+    ports:
+      - 8000:8000
+    command:
+      - server
+    # labels:
+    #   # 配置 SSL
+    #   - traefik.http.routers.inlets.tls=true
+    #   - traefik.http.routers.inlets.tls.certresolver=ali
+    #   # 开放 转发
+    #   - traefik.http.routers.traefik.rule=Host(`www.${DOMAIN_NAME}`)
+    #   - traefik.http.services.inlets.loadbalancer.server.port=8000

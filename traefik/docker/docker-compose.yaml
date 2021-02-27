@@ -48,6 +48,14 @@ services:
       - traefik.http.middlewares.traefik.basicauth.users=${USER}:${PASSWORD}
       - traefik.http.middlewares.traefik.basicauth.removeheader=true
       - traefik.http.routers.traefik.middlewares=traefik@docker
+      # 全局重定向到HTTPS
+      - traefik.http.routers.web.rule=hostregexp(`{host:.+}`)
+      - traefik.http.routers.web.entrypoints=web
+      - traefik.http.routers.web.middlewares=redirect-to-https
+      # 重定向中间件
+      - traefik.http.middlewares.redirect-to-https.redirectscheme.scheme=https
+      - traefik.http.middlewares.redirect-to-https.redirectscheme.permanent=true
+      - traefik.http.middlewares.redirect-to-https.redirectscheme.port=443
   inlets:
     container_name: "inlets"
     image: inlets/inlets:2.7.4
@@ -55,10 +63,13 @@ services:
       - 8000:8000
     command:
       - server
-    # labels:
-    #   # 配置 SSL
-    #   - traefik.http.routers.inlets.tls=true
-    #   - traefik.http.routers.inlets.tls.certresolver=ali
-    #   # 开放 转发
-    #   - traefik.http.routers.traefik.rule=Host(`www.${DOMAIN_NAME}`)
-    #   - traefik.http.services.inlets.loadbalancer.server.port=8000
+      - --port=8000
+      - --token=${token}
+    labels:
+      # 配置 SSL
+      - traefik.http.routers.inlets.tls=true
+      - traefik.http.routers.inlets.tls.certresolver=ali
+      # 开放 转发
+      - traefik.http.routers.inlets.rule=Host(`www.${DOMAIN_NAME}`)
+      - traefik.http.routers.inlets.entrypoints=websecure
+      - traefik.http.services.inlets.loadbalancer.server.port=8000
